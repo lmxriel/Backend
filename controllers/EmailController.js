@@ -96,13 +96,22 @@ exports.rejectAdoption = async (req, res) => {
     const adoptionId = req.params.id;
     const { adopterName, email, petName } = req.body;
 
-    // Update DB
-    await db.query(
+    if (!adoptionId || !adopterName || !email || !petName) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // Update DB (promise style)
+    const [result] = await db.query(
       "UPDATE adoption SET status = 'Rejected' WHERE adoption_id = ?",
       [adoptionId]
     );
 
-    console.log(petName);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Adoption request not found" });
+    }
+
+    console.log("Rejecting adoption:", { adoptionId, petName, email });
+
     // Send email with template
     await adoptionEmail(
       {
@@ -121,10 +130,11 @@ exports.rejectAdoption = async (req, res) => {
       message: "Adoption rejected & email sent",
     });
   } catch (err) {
-    console.error(err);
+    console.error("rejectAdoption error:", err); // log full error
     res.status(500).json({ error: "Failed to reject adoption" });
   }
 };
+
 
 exports.approveAppointment = (req, res) => {
   try {
