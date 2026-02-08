@@ -53,6 +53,37 @@ exports.getAllAppointment = async (req, res) => {
     res.json(rows);
   });
 };
+
+// Helper to convert your salary strings to a numeric value
+function parseMonthlySalary(raw) {
+  if (!raw) return 0;
+
+  // Normalize string: lowercase, remove peso sign, commas, spaces
+  const s = String(raw)
+    .toLowerCase()
+    .replace(/[\s₱,]/g, "");
+
+  // "Below₱5,000" → treat as less than 5000
+  if (s.includes("below")) return 0;
+
+  // Range: "5000-10000" or "p5000-10000"
+  const rangeMatch = s.match(/(\d+)\s*-\s*(\d+)/);
+  if (rangeMatch) {
+    const min = parseInt(rangeMatch[1], 10);
+    const max = parseInt(rangeMatch[2], 10);
+    // you can choose min, max, or average; here we use min (conservative)
+    return min;
+  }
+
+  // Single value: "10000"
+  const numMatch = s.match(/(\d+)/);
+  if (numMatch) {
+    return parseInt(numMatch[1], 10);
+  }
+
+  return 0;
+}
+
 exports.submitAdoptionRequest = async (req, res) => {
   const { pet_id, purpose_of_adoption } = req.body;
   const user_id = req.user.user_id; // Extracted from JWT token
@@ -62,25 +93,37 @@ exports.submitAdoptionRequest = async (req, res) => {
   }
 
   try {
-    // 1) Get user age from DB
-    const ageQuery = `
-      SELECT TIMESTAMPDIFF(YEAR, birthdate, CURDATE()) AS age
+    // 1) Get user age, salary, email, last_name from DB
+    const userQuery = `
+      SELECT 
+        TIMESTAMPDIFF(YEAR, birthdate, CURDATE()) AS age,
+        monthly_salary,
+        email,
+        last_name
       FROM user
       WHERE user_id = ?
     `;
-    db.query(ageQuery, [user_id], async (ageErr, ageRows) => {
-      if (ageErr) {
-        console.error("Error getting user age:", ageErr);
-        return res.status(500).json({ error: "Failed to validate user age" });
+    db.query(userQuery, [user_id], async (userErr, userRows) => {
+      if (userErr) {
+        console.error("Error getting user details:", userErr);
+        return res
+          .status(500)
+          .json({ error: "Failed to validate user details" });
       }
 
-      if (!ageRows.length || ageRows[0].age == null) {
+      if (!userRows.length) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const age = userRows[0].age;
+      const monthly_salary_raw = userRows[0].monthly_salary;
+
+      // Check if birthdate is missing
+      if (age == null) {
         return res.status(400).json({
           error: "User birthdate is missing. Cannot process request.",
         });
       }
-
-      const age = ageRows[0].age;
 
       // If user is below 18 → reject immediately
       if (age < 18) {
@@ -90,7 +133,20 @@ exports.submitAdoptionRequest = async (req, res) => {
             "You must be at least 18 years old to submit an adoption request.",
         });
       }
-      // 2) Age is 18+ → proceed with AI validation as before
+
+      // Convert salary string to numeric value
+      const salaryValue = parseMonthlySalary(monthly_salary_raw);
+
+      // If monthly salary below 5000 → reject
+      if (salaryValue < 5000) {
+        return res.status(403).json({
+          status: "LOW_INCOME",
+          message:
+            "Monthly salary must be at least P5000 to submit an adoption request.",
+        });
+      }
+
+      // 2) Age 18+ and salary >=5000 → proceed with AI validation
       const prompt = `
         Respond ONLY in JSON format:
         { "decision": "VALID" } or { "decision": "INVALID" }
@@ -120,7 +176,7 @@ exports.submitAdoptionRequest = async (req, res) => {
           "JSON parse error:",
           parseErr,
           "Raw response:",
-          responseText
+          responseText,
         );
         return res.status(500).json({ error: "AI validation failed" });
       }
@@ -135,75 +191,63 @@ exports.submitAdoptionRequest = async (req, res) => {
         const petName =
           petResult && petResult.length ? petResult[0].name : null;
 
-        const userQuery = `SELECT email, last_name FROM user WHERE user_id = ?`;
-        db.query(userQuery, [user_id], (err2, userResult) => {
-          if (err2) {
-            console.error("Error getting user details:", err2);
-            return res
-              .status(500)
-              .json({ error: "Failed to fetch user details" });
-          }
+        const adopterEmail = userRows[0].email || null;
+        const adopterLastname = userRows[0].last_name || null;
 
-          const adopterEmail =
-            userResult && userResult.length ? userResult[0].email : null;
-          const adopterLastname =
-            userResult && userResult.length ? userResult[0].last_name : null;
-
-          // If INVALID → reject + send email
-          if (decisionObj.decision !== "VALID") {
-            setTimeout(async () => {
-              try {
-                await adoptionEmail(
-                  {
-                    body: {
-                      to: adopterEmail,
-                      userName: adopterLastname,
-                      petName: petName,
-                      type: "rejected",
-                    },
+        // If INVALID → reject + send email
+        if (decisionObj.decision !== "VALID") {
+          setTimeout(async () => {
+            try {
+              await adoptionEmail(
+                {
+                  body: {
+                    to: adopterEmail,
+                    userName: adopterLastname,
+                    petName: petName,
+                    type: "rejected",
                   },
-                  { status: () => ({ json: () => {} }) }
-                );
-                console.log(
-                  `Rejection email sent to ${adopterEmail} for ${petName}`
-                );
-              } catch (mailErr) {
-                console.error("Error sending rejection email:", mailErr);
-              }
-            }, 1000);
+                },
+                { status: () => ({ json: () => {} }) },
+              );
+              console.log(
+                `Rejection email sent to ${adopterEmail} for ${petName}`,
+              );
+            } catch (mailErr) {
+              console.error("Error sending rejection email:", mailErr);
+            }
+          }, 1000);
 
-            return res.json({
-              status: "INVALID",
-              message: "Invalid adoption purpose. Request rejected.",
+          return res.json({
+            status: "INVALID",
+            message: "Invalid adoption purpose. Request rejected.",
+            petName,
+          });
+        }
+
+        // If VALID → insert into DB
+        const sql = `
+          INSERT INTO adoption (pet_id, user_id, dateRequested, purpose_of_adoption, status)
+          VALUES (?, ?, NOW(), ?, 'Pending')
+        `;
+
+        db.query(
+          sql,
+          [pet_id, user_id, purpose_of_adoption],
+          (insertErr, result) => {
+            if (insertErr) {
+              console.error("Error inserting adoption request:", insertErr);
+              return res
+                .status(500)
+                .json({ error: "Failed to submit adoption request" });
+            }
+
+            res.json({
+              message: "Adoption request submitted successfully",
+              adoption_id: result.insertId,
               petName,
             });
-          }
-
-          // If VALID → insert into DB
-          const sql = `
-            INSERT INTO adoption (pet_id, user_id, dateRequested, purpose_of_adoption, status)
-            VALUES (?, ?, NOW(), ?, 'Pending')
-          `;
-
-          db.query(
-            sql,
-            [pet_id, user_id, purpose_of_adoption],
-            (insertErr, result) => {
-              if (insertErr) {
-                console.error("Error inserting adoption request:", insertErr);
-                return res
-                  .status(500)
-                  .json({ error: "Failed to submit adoption request" });
-              }
-
-              res.json({
-                message: "Adoption request submitted successfully",
-                adoption_id: result.insertId,
-                petName,
-              });
-            }
-          );
-        });
+          },
+        );
       });
     });
   } catch (error) {
@@ -211,6 +255,7 @@ exports.submitAdoptionRequest = async (req, res) => {
     res.status(500).json({ error: "Adoption validation process failed" });
   }
 };
+
 exports.getAppointmentAvailability = (req, res) => {
   const { date } = req.query; // 'YYYY-MM-DD'
 
