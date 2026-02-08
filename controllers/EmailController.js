@@ -135,6 +135,14 @@ exports.rejectAdoption = async (req, res) => {
   }
 };
 
+function queryAsync(sql, params) {
+  return new Promise((resolve, reject) => {
+    db.query(sql, params, (err, results) => {
+      if (err) return reject(err);
+      resolve(results);
+    });
+  });
+}
 
 exports.approveAppointment = (req, res) => {
   try {
