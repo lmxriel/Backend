@@ -91,6 +91,17 @@ exports.approveAdoption = (req, res) => {
   }
 };
 
+function queryAsync(sql, params) {
+  return new Promise((resolve, reject) => {
+    db.query(sql, params, (err, results) => {
+      if (err) return reject(err);
+      resolve(results);
+    });
+  });
+}
+
+
+
 exports.rejectAdoption = async (req, res) => {
   try {
     const adoptionId = req.params.id;
@@ -100,8 +111,8 @@ exports.rejectAdoption = async (req, res) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    // Update DB (promise style)
-    const [result] = await db.query(
+    // Use promise wrapper instead of await db.query(...)
+    const result = await queryAsync(
       "UPDATE adoption SET status = 'Rejected' WHERE adoption_id = ?",
       [adoptionId]
     );
@@ -112,7 +123,6 @@ exports.rejectAdoption = async (req, res) => {
 
     console.log("Rejecting adoption:", { adoptionId, petName, email });
 
-    // Send email with template
     await adoptionEmail(
       {
         body: {
@@ -130,19 +140,11 @@ exports.rejectAdoption = async (req, res) => {
       message: "Adoption rejected & email sent",
     });
   } catch (err) {
-    console.error("rejectAdoption error:", err); // log full error
+    console.error("rejectAdoption error:", err);
     res.status(500).json({ error: "Failed to reject adoption" });
   }
 };
 
-function queryAsync(sql, params) {
-  return new Promise((resolve, reject) => {
-    db.query(sql, params, (err, results) => {
-      if (err) return reject(err);
-      resolve(results);
-    });
-  });
-}
 
 exports.approveAppointment = (req, res) => {
   try {
