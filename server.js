@@ -41,6 +41,7 @@ app.use("/appointment", appointmentEmailRoutes);
 app.use("/conversations", conversationRoutes);
 app.use("/report", reportRoutes);
 
+// Socket.IO is initialized by attaching it to the HTTP server so the backend can handle real-time communication
 // HTTP + Socket.IO
 const server = http.createServer(app);
 initSocket(server);

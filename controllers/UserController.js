@@ -91,7 +91,7 @@ exports.registerUser = async (req, res) => {
           return res
             .status(201)
             .json({ message: "User registered successfully" });
-        }
+        },
       );
     });
   } catch (error) {
@@ -156,9 +156,9 @@ exports.login = async (req, res) => {
                 last_name: user.last_name,
               },
             });
-          }
+          },
         );
-      }
+      },
     );
   } catch (error) {
     console.error("Login error:", error);
@@ -218,11 +218,11 @@ exports.refreshToken = (req, res) => {
               return res.status(200).json({
                 access_token: newAccessToken,
               });
-            }
+            },
           );
-        }
+        },
       );
-    }
+    },
   );
 };
 
@@ -322,9 +322,9 @@ exports.createBooking = (req, res) => {
                 },
               });
             });
-          }
+          },
         );
-      }
+      },
     );
   } catch (error) {
     console.error("Server error:", error);
@@ -340,7 +340,7 @@ exports.logout = (req, res) => {
     db.query(
       "UPDATE auth_refresh_tokens SET revoked = 1 WHERE refresh_token = ?",
       [refreshToken],
-      () => {}
+      () => {},
     );
   }
 
@@ -376,7 +376,7 @@ exports.me = (req, res) => {
           first_name: user.first_name,
           last_name: user.last_name,
         });
-      }
+      },
     );
   } catch (error) {
     return res.status(401).json({ message: "Invalid or expired token" });
@@ -450,7 +450,7 @@ exports.logout = (req, res) => {
       // clear httpOnly cookie
       res.clearCookie("refreshToken");
       return res.status(200).json({ message: "Logged out" });
-    }
+    },
   );
 };
 
@@ -569,9 +569,9 @@ exports.forgotPassword = (req, res) => {
               message: "OTP generated but email failed. Try again.",
             });
           }
-        }
+        },
       );
-    }
+    },
   );
 };
 
@@ -592,7 +592,7 @@ exports.verifyForgotOtpAndResetPassword = async (req, res) => {
       db.query(
         "SELECT user_id FROM user WHERE email = ?",
         [cleanEmail],
-        (err, rows) => (err ? reject(err) : resolve(rows))
+        (err, rows) => (err ? reject(err) : resolve(rows)),
       );
     });
 
@@ -613,7 +613,7 @@ exports.verifyForgotOtpAndResetPassword = async (req, res) => {
         LIMIT 1
         `,
         [cleanEmail, code],
-        (err, rows) => (err ? reject(err) : resolve(rows))
+        (err, rows) => (err ? reject(err) : resolve(rows)),
       );
     });
 
@@ -628,7 +628,7 @@ exports.verifyForgotOtpAndResetPassword = async (req, res) => {
       db.query(
         "UPDATE user SET password = ? WHERE user_id = ?",
         [hashedPassword, userId],
-        (err) => (err ? reject(err) : resolve())
+        (err) => (err ? reject(err) : resolve()),
       );
     });
 

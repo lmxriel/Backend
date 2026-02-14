@@ -22,12 +22,12 @@ exports.getAdoptionReport = (req, res) => {
       ad.dateRequested,
       ad.dateAdopted,
       ad.purpose_of_adoption,
-      ad.status
+      ad.status,
+      ad.reasons
     FROM adoption ad
     JOIN pet  p ON p.pet_id = ad.pet_id
     JOIN user u ON u.user_id = ad.user_id
-    WHERE ad.status = 'Approved'
-      AND ad.dateRequested BETWEEN ? AND ?
+    WHERE ad.dateRequested BETWEEN ? AND ?
     ORDER BY ad.dateRequested DESC, ad.adoption_id DESC
   `;
 
@@ -64,8 +64,7 @@ exports.getAppointmentReport = (req, res) => {
       a.timeSchedule
     FROM appointment a
     JOIN user u ON u.user_id = a.user_id
-    WHERE a.review = 'Accepted'
-      AND a.appointment_date BETWEEN ? AND ?
+    WHERE a.appointment_date BETWEEN ? AND ?
     ORDER BY a.appointment_date DESC,
              a.timeSchedule DESC,
              a.appointment_id DESC

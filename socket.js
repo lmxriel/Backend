@@ -3,6 +3,7 @@ const { Server } = require("socket.io");
 
 let io = null;
 
+// allow frontend to connect
 function initSocket(server) {
   io = new Server(server, {
     cors: {
@@ -11,6 +12,7 @@ function initSocket(server) {
     },
   });
 
+  //when a user opens the website, socket creates a connection 
   io.on("connection", (socket) => {
     console.log("🔌 socket connected:", socket.id);
 
@@ -33,6 +35,7 @@ function initSocket(server) {
       socket.to(room).emit("stop_typing", { conversationId, sender_role });
     });
 
+    // this happens when someone closes the browser, refreshes, loses internet
     socket.on("disconnect", () => {
       console.log("🔌 socket disconnected:", socket.id);
     });

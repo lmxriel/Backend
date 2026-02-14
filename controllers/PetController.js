@@ -55,6 +55,7 @@ exports.getDogPets = async (req, res) => {
     res.json(pets);
   });
 };
+
 exports.addPet = async (req, res) => {
   try {
     const {
@@ -204,6 +205,7 @@ exports.approveAdoption = async (req, res) => {
     });
   });
 };
+
 exports.updatePet = async (req, res) => {
   const { id } = req.params;
   const {
@@ -250,7 +252,6 @@ exports.updatePet = async (req, res) => {
     res.json({ message: "Pet updated successfully" });
   });
 };
-
 exports.deletePet = (req, res) => {
   const { id } = req.params;
 

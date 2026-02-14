@@ -32,7 +32,7 @@ exports.approveAdoption = (req, res) => {
 
         // 2. Update adoption status + dateAdopted
         db.query(
-          "UPDATE adoption SET status = 'Approved', dateAdopted = CURDATE() WHERE adoption_id = ?",
+          "UPDATE adoption SET status = 'Approved', dateAdopted = CURDATE(), reasons = 'Approved by admin after review.' WHERE adoption_id = ?",
           [adoptionId],
           (err) => {
             if (err) {
@@ -65,7 +65,7 @@ exports.approveAdoption = (req, res) => {
                         type: "approved",
                       },
                     },
-                    { status: () => ({ json: () => {} }) }
+                    { status: () => ({ json: () => {} }) },
                   );
 
                   return res.json({
@@ -79,11 +79,11 @@ exports.approveAdoption = (req, res) => {
                     .status(500)
                     .json({ error: "Failed to send email" });
                 }
-              }
+              },
             );
-          }
+          },
         );
-      }
+      },
     );
   } catch (err) {
     console.error(err);
@@ -100,8 +100,6 @@ function queryAsync(sql, params) {
   });
 }
 
-
-
 exports.rejectAdoption = async (req, res) => {
   try {
     const adoptionId = req.params.id;
@@ -113,8 +111,8 @@ exports.rejectAdoption = async (req, res) => {
 
     // Use promise wrapper instead of await db.query(...)
     const result = await queryAsync(
-      "UPDATE adoption SET status = 'Rejected' WHERE adoption_id = ?",
-      [adoptionId]
+      "UPDATE adoption SET status = 'Rejected', reasons = 'Rejected by admin due to incomplete documents.' WHERE adoption_id = ?",
+      [adoptionId],
     );
 
     if (result.affectedRows === 0) {
@@ -132,7 +130,7 @@ exports.rejectAdoption = async (req, res) => {
           type: "rejected",
         },
       },
-      { status: () => ({ json: () => {} }) }
+      { status: () => ({ json: () => {} }) },
     );
 
     return res.json({
@@ -144,7 +142,6 @@ exports.rejectAdoption = async (req, res) => {
     res.status(500).json({ error: "Failed to reject adoption" });
   }
 };
-
 
 exports.approveAppointment = (req, res) => {
   try {
@@ -212,7 +209,7 @@ exports.approveAppointment = (req, res) => {
                     status: "approved",
                   },
                 },
-                { status: () => ({ json: () => {} }) }
+                { status: () => ({ json: () => {} }) },
               );
 
               return res.json({
@@ -223,9 +220,9 @@ exports.approveAppointment = (req, res) => {
               console.error(emailErr);
               return res.status(500).json({ error: "Failed to send email" });
             }
-          }
+          },
         );
-      }
+      },
     );
   } catch (err) {
     console.error("Error accepting appointment:", err);
@@ -277,7 +274,7 @@ exports.rejectAppointment = (req, res) => {
                     status: "rejected",
                   },
                 },
-                { status: () => ({ json: () => {} }) }
+                { status: () => ({ json: () => {} }) },
               );
 
               // 4. Success response
@@ -289,9 +286,9 @@ exports.rejectAppointment = (req, res) => {
               console.error(emailErr);
               return res.status(500).json({ error: "Failed to send email" });
             }
-          }
+          },
         );
-      }
+      },
     );
   } catch (err) {
     console.error("Error rejecting appointment:", err);

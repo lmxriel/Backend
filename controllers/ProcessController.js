@@ -125,12 +125,19 @@ exports.submitAdoptionRequest = async (req, res) => {
         });
       }
 
-      // If user is below 18 → reject immediately
       if (age < 18) {
+        const reason = "User is below 18 years old.";
+
+        await db.promise().query(
+          `INSERT INTO adoption 
+          (pet_id, user_id, dateRequested, purpose_of_adoption, status, reasons)
+          VALUES (?, ?, NOW(), ?, 'Rejected', ?)`,
+          [pet_id, user_id, purpose_of_adoption, reason],
+        );
+
         return res.status(403).json({
           status: "UNDERAGE",
-          message:
-            "You must be at least 18 years old to submit an adoption request.",
+          message: reason,
         });
       }
 
@@ -139,10 +146,18 @@ exports.submitAdoptionRequest = async (req, res) => {
 
       // If monthly salary below 5000 → reject
       if (salaryValue < 5000) {
+        const reason = "Monthly salary is below P5000.";
+
+        await db.promise().query(
+          `INSERT INTO adoption 
+          (pet_id, user_id, dateRequested, purpose_of_adoption, status, reasons)
+          VALUES (?, ?, NOW(), ?, 'Rejected', ?)`,
+          [pet_id, user_id, purpose_of_adoption, reason],
+        );
+
         return res.status(403).json({
           status: "LOW_INCOME",
-          message:
-            "Monthly salary must be at least P5000 to submit an adoption request.",
+          message: reason,
         });
       }
 
@@ -215,6 +230,14 @@ exports.submitAdoptionRequest = async (req, res) => {
             } catch (mailErr) {
               console.error("Error sending rejection email:", mailErr);
             }
+            const reason =
+              "Adoption purpose failed AI validation (insufficient intent or harmful intent).";
+            await db.promise().query(
+              `INSERT INTO adoption 
+              (pet_id, user_id, dateRequested, purpose_of_adoption, status, reasons)
+              VALUES (?, ?, NOW(), ?, 'Rejected', ?)`,
+              [pet_id, user_id, purpose_of_adoption, reason],
+            );
           }, 1000);
 
           return res.json({
@@ -226,13 +249,19 @@ exports.submitAdoptionRequest = async (req, res) => {
 
         // If VALID → insert into DB
         const sql = `
-          INSERT INTO adoption (pet_id, user_id, dateRequested, purpose_of_adoption, status)
-          VALUES (?, ?, NOW(), ?, 'Pending')
+          INSERT INTO adoption 
+          (pet_id, user_id, dateRequested, purpose_of_adoption, status, reasons)
+          VALUES (?, ?, NOW(), ?, 'Pending', ?)
         `;
 
         db.query(
           sql,
-          [pet_id, user_id, purpose_of_adoption],
+          [
+            pet_id,
+            user_id,
+            purpose_of_adoption,
+            "Passed initial validation. Waiting for admin approval.",
+          ],
           (insertErr, result) => {
             if (insertErr) {
               console.error("Error inserting adoption request:", insertErr);
@@ -282,4 +311,54 @@ exports.getAppointmentAvailability = (req, res) => {
 
     return res.json({ date, booked });
   });
+};
+
+exports.updateUserProfile = async (req, res) => {
+  const user_id = req.user.user_id; // From JWT
+  const { first_name, last_name, monthly_salary, birthdate } = req.body;
+
+  // All fields required
+  if (!first_name || !last_name || !monthly_salary || !birthdate) {
+    return res.status(400).json({
+      error:
+        "first_name, last_name, monthly_salary, and birthdate are required.",
+    });
+  }
+
+  try {
+    // Validate birthdate (cannot be future)
+    const today = new Date();
+    const inputDate = new Date(birthdate);
+
+    if (inputDate > today) {
+      return res.status(400).json({
+        error: "Birthdate cannot be in the future.",
+      });
+    }
+
+    const sql = `
+      UPDATE user
+      SET 
+        first_name = ?,
+        last_name = ?,
+        monthly_salary = ?,
+        birthdate = ?
+      WHERE user_id = ?
+    `;
+
+    const [result] = await db
+      .promise()
+      .query(sql, [first_name, last_name, monthly_salary, birthdate, user_id]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.json({
+      message: "Profile updated successfully",
+    });
+  } catch (error) {
+    console.error("Error updating profile:", error);
+    res.status(500).json({ error: "Failed to update profile" });
+  }
 };
